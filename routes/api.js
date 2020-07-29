@@ -4,9 +4,8 @@ var Papa = require('papaparse');
 var jStat = require('jstat');
 var _ = require('lodash');
 var turf = require('@turf/turf');
-var memoize = require('memoizee');
 const NodeCache = require('node-cache');
-const myCache = new NodeCache({ stdTTL: 86400, useClones: false });
+const myCache = new NodeCache({ stdTTL: 43200, useClones: false });
 
 var router = express.Router();
 
@@ -19,90 +18,119 @@ const usCountiesHighResUrl =
 const covidByCountyUrl =
   'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv';
 
-const fetchUsCovidByCounty = memoize(
-  async () => {
-    const response = await fetch(covidByCountyUrl);
-    return await response.text();
-  },
-  { async: true }
-);
+const fetchUsCovidByCounty = async () => {
+  const cached = myCache.get('nyTimesCovidByCounty');
+  if (cached) {
+    return cached;
+  }
+  const response = await fetch(covidByCountyUrl);
+  const text = await response.text();
+  myCache.set('nyTimesCovidByCounty', text);
+  return text;
+};
 
-const fetchUsCountiesGeoJson = memoize(
-  async () => {
-    const cached = myCache.get('usCountiesGeoJsonHighRes');
-    if (cached) {
-      return cached;
-    }
+const fetchUsCountiesGeoJson = async () => {
+  const cached = myCache.get('usCountiesGeoJsonHighRes');
+  if (cached) {
+    return cached;
+  }
 
-    const response = await fetch(usCountiesHighResUrl);
-    const json = await response.json();
+  const response = await fetch(usCountiesHighResUrl);
+  const json = await response.json();
 
-    json.features.forEach((feature) => {
-      feature.id = feature.properties.GEO_ID.split('US')[1];
-    });
-    myCache.set('usCountiesGeoJsonHighRes', json, 0);
-    return json;
-  },
-  { async: true }
-);
+  json.features.forEach((feature) => {
+    feature.id = parseInt(feature.properties.GEO_ID.split('US')[1]);
+  });
+  myCache.set('usCountiesGeoJsonHighRes', json, 0);
+  return json;
+};
 
-const fetchUsCountiesLowRes = memoize(
-  async () => {
-    const cached = myCache.get('usCountiesGeoJsonLowRes');
-    if (cached) return cached;
+const fetchUsCountiesLowRes = async () => {
+  const cached = myCache.get('usCountiesGeoJsonLowRes');
+  if (cached) return cached;
 
-    const response = await fetch(usCountiesLowResUrl);
-    const json = await response.json();
-    myCache.set('usCountiesGeoJsonLowRes', json, 0);
-    return json;
-  },
-  { async: true }
-);
+  const response = await fetch(usCountiesLowResUrl);
+  const json = await response.json();
+  myCache.set('usCountiesGeoJsonLowRes', json, 0);
+  return json;
+};
 
-const fetchUsCountyCentroids = memoize(
-  async () => {
-    let centroids = myCache.get('usCountyCentroids');
-    if (centroids) return centroids;
+const fetchUsCountyCentroids = async () => {
+  let centroids = myCache.get('usCountyCentroids');
+  if (centroids) return centroids;
 
-    const lowRes = await fetchUsCountiesLowRes();
-    centroids = { type: 'FeatureCollection', features: [] };
-    lowRes.features.forEach((feature) => {
-      if (feature.geometry.type === 'Polygon') {
-        try {
-          centroids.features.push({
-            ...feature,
-            geometry: turf.centerOfMass(
-              turf.polygon(feature.geometry.coordinates)
-            ).geometry,
-            id: feature.properties.GEO_ID.split('US')[1],
-          });
-        } catch (err) {
-          console.log(err);
-          console.log(feature);
-        }
+  const lowRes = await fetchUsCountiesLowRes();
+  centroids = { type: 'FeatureCollection', features: [] };
+  lowRes.features.forEach((feature) => {
+    if (feature.geometry.type === 'Polygon') {
+      try {
+        centroids.features.push({
+          ...feature,
+          geometry: turf.centerOfMass(
+            turf.polygon(feature.geometry.coordinates)
+          ).geometry,
+          id: feature.properties.GEO_ID.split('US')[1],
+        });
+      } catch (err) {
+        console.log(err);
+        console.log(feature);
       }
-    });
-    myCache.set('usCountyCentroids', centroids, 0);
-    return centroids;
-  },
-  { async: true }
-);
+    }
+  });
+  myCache.set('usCountyCentroids', centroids, 0);
+  return centroids;
+};
 
-const getUsCovidAnalysis = memoize((cases) => {
+const fixNewYorkCity = (cases) => {
+  cases.data.forEach((record) => {
+    if (
+      record.county === 'New York City' &&
+      record.state === 'New York' &&
+      record.fips === ''
+    ) {
+      record.fips = 36061;
+    }
+  });
+  return cases;
+};
+
+const getUsCovidAnalysis = async (cases, lowResPromise) => {
+  const cached = myCache.get('usCovidAnalysis');
+  if (cached) return cached;
+
+  cases = fixNewYorkCity(cases);
+
   const casesByCounty = {};
+  const lowRes = await lowResPromise;
+  lowRes.features.forEach((county) => {
+    casesByCounty[parseInt(county.properties.GEO_ID.split('US')[1])] = [
+      {
+        date: '2019-01-01',
+        cases: 0,
+        deaths: 0,
+        county: county.properties.NAME,
+        state: county.properties.STATE,
+      },
+    ];
+  });
   cases.data.forEach((status) => {
-    if (status.fips in casesByCounty) {
-      casesByCounty[status.fips].push({
+    const countyId = parseInt(status.fips);
+    if (countyId in casesByCounty) {
+      casesByCounty[countyId].push({
         date: status.date,
         cases: status.cases,
         deaths: status.deaths,
+        county: status.county,
+        state: status.state,
       });
     } else {
-      casesByCounty[status.fips] = [
+      casesByCounty[countyId] = [
         {
           date: status.date,
           cases: status.cases,
           deaths: status.deaths,
+          county: status.county,
+          state: status.state,
         },
       ];
     }
@@ -136,28 +164,23 @@ const getUsCovidAnalysis = memoize((cases) => {
   */
 
   // return { geoCasesByCounty: counties, casesByCounty, casesByDate };
-  return { casesByCounty };
-});
+  const analysis = { casesByCounty };
+  myCache.set('usCovidAnalysis', analysis);
+  return { analysis };
+};
 
-const fetchCasesByCounty = memoize(
-  async () => {
-    console.log('fetching cases by county');
-    const response = await fetchUsCovidByCounty();
+const fetchCasesByCounty = async () => {
+  const lowResPromise = fetchUsCountiesLowRes();
+  const cases = await fetchUsCovidByCounty();
 
-    const usCovidByCounty = Papa.parse(response, { header: true });
+  const usCovidByCounty = Papa.parse(cases, { header: true });
 
-    console.log('parsed responses');
-    myCache.set('usCasesByCounty', usCovidByCounty);
-    console.log('parsed csv data');
-    let usCovidAnalysis = myCache.get('usCovidAnalysis');
-    if (!usCovidAnalysis) {
-      usCovidAnalysis = getUsCovidAnalysis(usCovidByCounty);
-      myCache.set('usCovidAnalysis', usCovidAnalysis);
-    }
-    return { ...usCovidAnalysis };
-  },
-  { async: true }
-);
+  console.log('parsed responses');
+  myCache.set('usCasesByCounty', usCovidByCounty);
+  console.log('parsed csv data');
+  const usCovidAnalysis = getUsCovidAnalysis(usCovidByCounty, lowResPromise);
+  return usCovidAnalysis;
+};
 
 /* GET users listing. */
 router.get('/', function (req, res, next) {

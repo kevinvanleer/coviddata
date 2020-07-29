@@ -14,7 +14,6 @@
     "jStat": "^1.8.6",
     "jstat": "^1.9.3",
     "lodash": "^4.17.19",
-    "memoizee": "^0.4.14",
     "morgan": "~1.9.1",
     "node-cache": "^5.1.2",
     "node-fetch": "^2.6.0",
