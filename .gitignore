@@ -1,0 +1,3 @@
+.tmp
+*.sw*
+node_modules
