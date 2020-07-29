@@ -88,18 +88,24 @@ const fetchUsCountyCentroids = memoize(
   { async: true }
 );
 
-const getUsCovidAnalysis = memoize((counties, cases) => {
+const getUsCovidAnalysis = memoize((cases) => {
   const casesByCounty = {};
-  counties.features.forEach(
-    (county) => (casesByCounty[county.properties.GEO_ID.split('US')[1]] = [])
-  );
   cases.data.forEach((status) => {
-    status.fips in casesByCounty &&
+    if (status.fips in casesByCounty) {
       casesByCounty[status.fips].push({
         date: status.date,
         cases: status.cases,
         deaths: status.deaths,
       });
+    } else {
+      casesByCounty[status.fips] = [
+        {
+          date: status.date,
+          cases: status.cases,
+          deaths: status.deaths,
+        },
+      ];
+    }
   });
   /* const casesByDate = {};
   cases.data.forEach((status) => {
@@ -110,6 +116,7 @@ const getUsCovidAnalysis = memoize((counties, cases) => {
     }
   }); */
 
+  /*
   counties.features.forEach((county) => {
     county.properties.cases = parseInt(
       _.get(
@@ -126,35 +133,28 @@ const getUsCovidAnalysis = memoize((counties, cases) => {
       )
     );
   });
+  */
 
   // return { geoCasesByCounty: counties, casesByCounty, casesByDate };
-  return { geoCasesByCounty: counties, casesByCounty };
+  return { casesByCounty };
 });
 
 const fetchCasesByCounty = memoize(
   async () => {
-    console.log('fetching data');
-    const responses = await Promise.all([
-      fetchUsCountiesGeoJson(),
-      fetchUsCovidByCounty(),
-      fetchUsCountyCentroids(),
-    ]);
+    console.log('fetching cases by county');
+    const response = await fetchUsCovidByCounty();
 
-    const usCountiesGeoJsonHighRes = responses[0];
-    const usCovidByCounty = Papa.parse(responses[1], { header: true });
+    const usCovidByCounty = Papa.parse(response, { header: true });
 
     console.log('parsed responses');
     myCache.set('usCasesByCounty', usCovidByCounty);
     console.log('parsed csv data');
     let usCovidAnalysis = myCache.get('usCovidAnalysis');
     if (!usCovidAnalysis) {
-      usCovidAnalysis = getUsCovidAnalysis(
-        usCountiesGeoJsonHighRes,
-        usCovidByCounty
-      );
+      usCovidAnalysis = getUsCovidAnalysis(usCovidByCounty);
       myCache.set('usCovidAnalysis', usCovidAnalysis);
     }
-    return { ...usCovidAnalysis, centroids: responses[2] };
+    return { ...usCovidAnalysis };
   },
   { async: true }
 );
@@ -166,11 +166,25 @@ router.get('/', function (req, res, next) {
 
 router.get('/us-county-stats', async (req, res, next) => {
   const data = await fetchCasesByCounty();
-  const counties = data.geoCasesByCounty;
-  const casesArray = counties.features.map((county) => county.properties.cases);
-  const deathsArray = counties.features.map(
-    (county) => county.properties.deaths
-  );
+
+  const casesArray = [];
+  const deathsArray = [];
+  data.casesByCounty.forEach((county) => {
+    casesArray.push = parseInt(
+      _.get(
+        _.last(data.casesByCounty[county.properties.GEO_ID.split('US')[1]]),
+        'cases',
+        0
+      )
+    );
+    deathsArray.push = parseInt(
+      _.get(
+        _.last(data.casesByCounty[county.properties.GEO_ID.split('US')[1]]),
+        'deaths',
+        0
+      )
+    );
+  });
 
   const casesMax = jStat.max(casesArray);
   const casesMean = jStat.mean(casesArray);
@@ -201,9 +215,8 @@ router.get('/us-county-stats', async (req, res, next) => {
   });
 });
 
-router.get('/us-geo-cases-by-county', async (req, res, next) => {
-  const data = await fetchCasesByCounty();
-  res.send(data.geoCasesByCounty);
+router.get('/us-counties', async (req, res, next) => {
+  res.send(await fetchUsCountiesGeoJson());
 });
 
 router.get('/us-cases-by-county', async (req, res, next) => {
@@ -211,8 +224,7 @@ router.get('/us-cases-by-county', async (req, res, next) => {
   res.send(data.casesByCounty);
 });
 router.get('/us-county-centroids', async (req, res, next) => {
-  const data = await fetchCasesByCounty();
-  res.send(data.centroids);
+  res.send(await fetchUsCountyCentroids());
 });
 
 module.exports = router;
