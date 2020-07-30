@@ -166,18 +166,20 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
   // return { geoCasesByCounty: counties, casesByCounty, casesByDate };
   const analysis = { casesByCounty };
   myCache.set('usCovidAnalysis', analysis);
-  return { analysis };
+  return analysis;
 };
 
 const fetchCasesByCounty = async () => {
   const lowResPromise = fetchUsCountiesLowRes();
   const cases = await fetchUsCovidByCounty();
 
-  const usCovidByCounty = Papa.parse(cases, { header: true });
+  let usCovidByCounty = myCache.get('usCasesByCounty');
+  if (!usCovidByCounty) {
+    usCovidByCounty = Papa.parse(cases, { header: true });
+    console.log('parsed csv data');
+    myCache.set('usCasesByCounty', usCovidByCounty);
+  }
 
-  console.log('parsed responses');
-  myCache.set('usCasesByCounty', usCovidByCounty);
-  console.log('parsed csv data');
   const usCovidAnalysis = getUsCovidAnalysis(usCovidByCounty, lowResPromise);
   return usCovidAnalysis;
 };
