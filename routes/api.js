@@ -105,7 +105,7 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
   lowRes.features.forEach((county) => {
     casesByCounty[parseInt(county.properties.GEO_ID.split('US')[1])] = [
       {
-        date: '2019-01-01',
+        date: '2020-01-01',
         cases: 0,
         deaths: 0,
         county: county.properties.NAME,
