@@ -194,6 +194,8 @@ router.get('/us-county-stats', async (req, res, next) => {
 
   const casesArray = [];
   const deathsArray = [];
+  let totalCases = 0;
+  let totalDeaths = 0;
   data.casesByCounty.forEach((county) => {
     casesArray.push = parseInt(
       _.get(
@@ -209,6 +211,8 @@ router.get('/us-county-stats', async (req, res, next) => {
         0
       )
     );
+    totalCases += _.last(casesArray);
+    totalDeaths += _.last(deathsArray);
   });
 
   const casesMax = jStat.max(casesArray);
@@ -235,8 +239,14 @@ router.get('/us-county-stats', async (req, res, next) => {
       mean: casesMean,
       mode: casesMode,
       percetiles: casesPercentiles,
+      total: totalCases,
     },
-    deaths: { max: deathsMax, mean: deathsMean, mode: deathsMode },
+    deaths: {
+      max: deathsMax,
+      mean: deathsMean,
+      mode: deathsMode,
+      total: totalDeaths,
+    },
   });
 });
 
