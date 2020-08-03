@@ -169,16 +169,21 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
   return analysis;
 };
 
-const fetchCasesByCounty = async () => {
-  const lowResPromise = fetchUsCountiesLowRes();
+const fetchUsCovidByCountyJson = async () => {
   const cases = await fetchUsCovidByCounty();
 
   let usCovidByCounty = myCache.get('usCasesByCounty');
-  if (!usCovidByCounty) {
+  if (usCovidByCounty === undefined) {
     usCovidByCounty = Papa.parse(cases, { header: true });
     console.log('parsed csv data');
     myCache.set('usCasesByCounty', usCovidByCounty);
   }
+  return usCovidByCounty;
+};
+
+const fetchCasesByCounty = async () => {
+  const usCovidByCounty = await fetchUsCovidByCountyJson();
+  const lowResPromise = fetchUsCountiesLowRes();
 
   const usCovidAnalysis = getUsCovidAnalysis(usCovidByCounty, lowResPromise);
   return usCovidAnalysis;
@@ -190,27 +195,15 @@ router.get('/', function (req, res, next) {
 });
 
 router.get('/us-county-stats', async (req, res, next) => {
-  const data = await fetchCasesByCounty();
+  const { casesByCounty } = await fetchCasesByCounty();
 
   const casesArray = [];
   const deathsArray = [];
   let totalCases = 0;
   let totalDeaths = 0;
-  data.casesByCounty.forEach((county) => {
-    casesArray.push = parseInt(
-      _.get(
-        _.last(data.casesByCounty[county.properties.GEO_ID.split('US')[1]]),
-        'cases',
-        0
-      )
-    );
-    deathsArray.push = parseInt(
-      _.get(
-        _.last(data.casesByCounty[county.properties.GEO_ID.split('US')[1]]),
-        'deaths',
-        0
-      )
-    );
+  Object.values(casesByCounty).forEach((county) => {
+    casesArray.push(parseInt(_.get(_.last(county), 'cases', 0)));
+    deathsArray.push(parseInt(_.get(_.last(county), 'deaths', 0)));
     totalCases += _.last(casesArray);
     totalDeaths += _.last(deathsArray);
   });
