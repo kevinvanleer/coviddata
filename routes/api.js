@@ -1,6 +1,6 @@
 var express = require('express');
 var fetch = require('node-fetch');
-var Papa = require('papaparse');
+var csv = require('csvtojson');
 var jStat = require('jstat');
 var _ = require('lodash');
 var turf = require('@turf/turf');
@@ -24,7 +24,7 @@ const fetchUsCovidByCounty = async () => {
     return cached;
   }
   const response = await fetch(covidByCountyUrl);
-  const text = await response.text();
+  const text = response.body;
   myCache.set('nyTimesCovidByCounty', text);
   return text;
 };
@@ -135,35 +135,7 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
       ];
     }
   });
-  /* const casesByDate = {};
-  cases.data.forEach((status) => {
-    if (status.date in casesByDate) {
-      casesByDate[status.date].push(status);
-    } else {
-      casesByDate[status.date] = [status];
-    }
-  }); */
 
-  /*
-  counties.features.forEach((county) => {
-    county.properties.cases = parseInt(
-      _.get(
-        _.last(casesByCounty[county.properties.GEO_ID.split('US')[1]]),
-        'cases',
-        0
-      )
-    );
-    county.properties.deaths = parseInt(
-      _.get(
-        _.last(casesByCounty[county.properties.GEO_ID.split('US')[1]]),
-        'deaths',
-        0
-      )
-    );
-  });
-  */
-
-  // return { geoCasesByCounty: counties, casesByCounty, casesByDate };
   const analysis = { casesByCounty };
   myCache.set('usCovidAnalysis', analysis);
   return analysis;
@@ -174,8 +146,7 @@ const fetchUsCovidByCountyJson = async () => {
 
   let usCovidByCounty = myCache.get('usCasesByCounty');
   if (usCovidByCounty === undefined) {
-    usCovidByCounty = Papa.parse(cases, { header: true });
-    console.log('parsed csv data');
+    usCovidByCounty = { data: await csv().fromStream(cases) };
     myCache.set('usCasesByCounty', usCovidByCounty);
   }
   return usCovidByCounty;
