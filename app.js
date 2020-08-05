@@ -6,7 +6,6 @@ var chokidar = require('chokidar');
 
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
-//var apiRouter = require('./routes/api');
 
 var watcher = chokidar.watch('./routes');
 
@@ -14,7 +13,7 @@ watcher.on('ready', function () {
   watcher.on('all', function () {
     console.log('Clearing /dist/ module cache from server');
     Object.keys(require.cache).forEach(function (id) {
-      if (/[\/\\]routes[\/\\]/.test(id)) delete require.cache[id];
+      if (/[/\\]routes[/\\]/.test(id)) delete require.cache[id];
     });
   });
 });
