@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 const csv = require('csvtojson');
 const jStat = require('jstat');
 const _ = require('lodash');
+const moment = require('moment');
 const turf = require('@turf/turf');
 const fs = require('fs');
 const path = require('path');
@@ -11,11 +12,19 @@ const myCache = new NodeCache({ stdTTL: 43200, useClones: false });
 
 var router = express.Router();
 
+const getUsCountiesUrl = (resolution) =>
+  `https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_050_00_${resolution}.json`;
+
+/*
 const usCountiesLowResUrl =
   'https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_050_00_20m.json';
 
+const usCountiesMedResUrl =
+  'https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_050_00_5m.json';
+
 const usCountiesHighResUrl =
   'https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_050_00_500k.json';
+  */
 
 const covidByCountyUrl =
   'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv';
@@ -78,15 +87,27 @@ const getMoCities = () => {
   });
 };
 
-const fetchUsCountiesGeoJson = async () => {
-  const cached = myCache.get('usCountiesGeoJsonHighRes');
+const fetchUsCountiesGeoJson = async (resolution = '500k') => {
+  const cached = myCache.get(`usCountiesGeoJson_${resolution}`);
+  if (cached) {
+    return cached;
+  }
+
+  const response = await fetch(getUsCountiesUrl(resolution));
+  const json = await response.json();
+
+  myCache.set(`usCountiesGeoJson_${resolution}`, json, 0);
+  return json;
+};
+
+const fetchUsCountiesCitiesHybrid = async (resolution = '500k') => {
+  const cached = myCache.get(`usCountiesCitiesHybrid_{resolution}`);
   if (cached) {
     return cached;
   }
 
   const moCities = getMoCities();
-  const response = await fetch(usCountiesHighResUrl);
-  const json = await response.json();
+  const json = await fetchUsCountiesGeoJson(resolution);
 
   json.features.forEach((feature) => {
     _.set(
@@ -98,17 +119,7 @@ const fetchUsCountiesGeoJson = async () => {
 
   json.features.push(mergeNycBoroughs(json));
   json.features.push(...(await moCities));
-  myCache.set('usCountiesGeoJsonHighRes', json, 0);
-  return json;
-};
-
-const fetchUsCountiesLowRes = async () => {
-  const cached = myCache.get('usCountiesGeoJsonLowRes');
-  if (cached) return cached;
-
-  const response = await fetch(usCountiesLowResUrl);
-  const json = await response.json();
-  myCache.set('usCountiesGeoJsonLowRes', json, 0);
+  myCache.set(`usCountiesCitiesHybrid_{resolution}`, json, 0);
   return json;
 };
 
@@ -116,7 +127,7 @@ const fetchUsCountyCentroids = async () => {
   let centroids = myCache.get('usCountyCentroids');
   if (centroids) return centroids;
 
-  const lowRes = await fetchUsCountiesLowRes();
+  const lowRes = await fetchUsCountiesCitiesHybrid('20m');
   centroids = { type: 'FeatureCollection', features: [] };
   lowRes.features.forEach((feature) => {
     if (feature.geometry.type === 'Polygon') {
@@ -209,31 +220,35 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
   });
 
   const badRecords = [];
-  cases.data.forEach((status) => {
-    const countyId = parseInt(status.fips);
+  cases.data
+    .filter((status) =>
+      moment(status.date, 'YYYY-MM-DD').isAfter(moment().subtract(7, 'days'))
+    )
+    .forEach((status) => {
+      const countyId = parseInt(status.fips);
 
-    if (isNaN(countyId)) {
-      badRecords.push(status);
-    } else if (countyId in casesByCounty) {
-      casesByCounty[countyId].push({
-        date: status.date,
-        cases: status.cases,
-        deaths: status.deaths,
-        county: status.county,
-        state: status.state,
-      });
-    } else {
-      casesByCounty[countyId] = [
-        {
+      if (isNaN(countyId)) {
+        badRecords.push(status);
+      } else if (countyId in casesByCounty) {
+        casesByCounty[countyId].push({
           date: status.date,
           cases: status.cases,
           deaths: status.deaths,
           county: status.county,
           state: status.state,
-        },
-      ];
-    }
-  });
+        });
+      } else {
+        casesByCounty[countyId] = [
+          {
+            date: status.date,
+            cases: status.cases,
+            deaths: status.deaths,
+            county: status.county,
+            state: status.state,
+          },
+        ];
+      }
+    });
 
   const nonReportingCounties = Object.entries(casesByCounty).filter(
     ([id, list]) => list.length === 1
@@ -258,10 +273,8 @@ const fetchUsCovidByCountyJson = async () => {
 
 const fetchCasesByCounty = async () => {
   const usCovidByCounty = await fetchUsCovidByCountyJson();
-  const lowResPromise = fetchUsCountiesLowRes();
 
-  const usCovidAnalysis = getUsCovidAnalysis(usCovidByCounty, lowResPromise);
-  return usCovidAnalysis;
+  return applyFixes(usCovidByCounty);
 };
 
 /* GET users listing. */
@@ -319,12 +332,12 @@ router.get('/us-county-stats', async (req, res, next) => {
 });
 
 router.get('/us-counties', async (req, res, next) => {
-  res.send(await fetchUsCountiesGeoJson());
+  const resolution = req.query.resolution || '500k';
+  res.send(await fetchUsCountiesCitiesHybrid(resolution));
 });
 
 router.get('/us-cases-by-county', async (req, res, next) => {
-  const data = await fetchCasesByCounty();
-  res.send(data.casesByCounty);
+  res.send(await fetchCasesByCounty());
 });
 router.get('/us-county-centroids', async (req, res, next) => {
   res.send(await fetchUsCountyCentroids());
