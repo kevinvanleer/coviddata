@@ -37,9 +37,9 @@ const mergeNycBoroughs = (json) => {
   const id = 36999;
   const nyc = {
     type: 'Feature',
-    id: id,
     properties: {
       GEO_ID: `0500000US${id}`,
+      FEATURE_ID: id,
       STATE: '36',
       COUNTY: '999',
       NAME: 'New York City',
@@ -89,7 +89,11 @@ const fetchUsCountiesGeoJson = async () => {
   const json = await response.json();
 
   json.features.forEach((feature) => {
-    feature.id = parseInt(feature.properties.GEO_ID.split('US')[1]);
+    _.set(
+      feature,
+      'properties.FEATURE_ID',
+      parseInt(feature.properties.GEO_ID.split('US')[1])
+    );
   });
 
   json.features.push(mergeNycBoroughs(json));
