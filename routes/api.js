@@ -137,7 +137,7 @@ const fetchUsCountyCentroids = async () => {
           geometry: turf.centerOfMass(
             turf.polygon(feature.geometry.coordinates)
           ).geometry,
-          id: feature.properties.GEO_ID.split('US')[1],
+          id: feature.properties.FEATURE_ID,
         });
       } catch (err) {
         console.log(err);
@@ -337,8 +337,24 @@ router.get('/us-counties', async (req, res, next) => {
 });
 
 router.get('/us-cases-by-county', async (req, res, next) => {
-  res.send(await fetchCasesByCounty());
+  const { data: cases } = await fetchCasesByCounty();
+
+  const pageSize = parseInt(req.query.pageSize) || cases.length;
+  let startIndex = parseInt(req.query.startIndex) || 0;
+  let lastIndex = startIndex + pageSize;
+
+  if (req.query.reverse === 'true') {
+    lastIndex = cases.length - startIndex;
+    startIndex = lastIndex - pageSize;
+    if (startIndex < 0) startIndex = 0;
+  }
+
+  console.debug({ startIndex, lastIndex });
+  console.debug(req.query);
+
+  res.send(cases.slice(startIndex, lastIndex));
 });
+
 router.get('/us-county-centroids', async (req, res, next) => {
   res.send(await fetchUsCountyCentroids());
 });
