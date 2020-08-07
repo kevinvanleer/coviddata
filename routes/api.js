@@ -29,6 +29,9 @@ const usCountiesHighResUrl =
 const covidByCountyUrl =
   'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv';
 
+const usCovidTotalsUrl =
+  'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us.csv';
+
 const fetchUsCovidByCounty = async () => {
   const cached = myCache.get('nyTimesCovidByCounty');
   if (cached) {
@@ -38,6 +41,29 @@ const fetchUsCovidByCounty = async () => {
   const text = response.body;
   myCache.set('nyTimesCovidByCounty', text);
   return text;
+};
+
+const fetchUsCovidTotals = async () => {
+  const cached = myCache.get('nyTimesUsCovidTotals');
+  if (cached) {
+    return cached;
+  }
+  const response = await fetch(usCovidTotalsUrl);
+  const text = response.body;
+  myCache.set('nyTimesUsCovidTotals', text);
+  return text;
+};
+
+const fetchUsCovidTotalsJson = async () => {
+  const cached = myCache.get('usCovidTotalsJson');
+  if (cached) return cached;
+
+  const totals = await fetchUsCovidTotals();
+
+  const json = { data: await csv().fromStream(totals) };
+  myCache.set('usCovidTotalsJson', json);
+
+  return _.get(json, 'data', {});
 };
 
 const nycboroughs = [36005, 36047, 36061, 36081, 36085];
@@ -353,6 +379,10 @@ router.get('/us-cases-by-county', async (req, res, next) => {
   console.debug(req.query);
 
   res.send(cases.slice(startIndex, lastIndex));
+});
+
+router.get('/us-totals', async (req, res, next) => {
+  res.send(await fetchUsCovidTotalsJson());
 });
 
 router.get('/us-county-centroids', async (req, res, next) => {
