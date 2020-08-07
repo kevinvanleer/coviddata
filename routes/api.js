@@ -34,9 +34,8 @@ const usCovidTotalsUrl =
 
 const fetchUsCovidByCounty = async () => {
   const cached = myCache.get('nyTimesCovidByCounty');
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
+
   const response = await fetch(covidByCountyUrl);
   const text = response.body;
   myCache.set('nyTimesCovidByCounty', text);
@@ -45,9 +44,8 @@ const fetchUsCovidByCounty = async () => {
 
 const fetchUsCovidTotals = async () => {
   const cached = myCache.get('nyTimesUsCovidTotals');
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
+
   const response = await fetch(usCovidTotalsUrl);
   const text = response.body;
   myCache.set('nyTimesUsCovidTotals', text);
@@ -115,9 +113,7 @@ const getMoCities = () => {
 
 const fetchUsCountiesGeoJson = async (resolution = '500k') => {
   const cached = myCache.get(`usCountiesGeoJson_${resolution}`);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
   const response = await fetch(getUsCountiesUrl(resolution));
   const json = await response.json();
@@ -128,9 +124,7 @@ const fetchUsCountiesGeoJson = async (resolution = '500k') => {
 
 const fetchUsCountiesCitiesHybrid = async (resolution = '500k') => {
   const cached = myCache.get(`usCountiesCitiesHybrid_{resolution}`);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
   const moCities = getMoCities();
   const json = await fetchUsCountiesGeoJson(resolution);
@@ -150,11 +144,11 @@ const fetchUsCountiesCitiesHybrid = async (resolution = '500k') => {
 };
 
 const fetchUsCountyCentroids = async () => {
-  let centroids = myCache.get('usCountyCentroids');
-  if (centroids) return centroids;
+  const cached = myCache.get('usCountycached');
+  if (cached) return cached;
 
   const lowRes = await fetchUsCountiesCitiesHybrid('20m');
-  centroids = { type: 'FeatureCollection', features: [] };
+  const centroids = { type: 'FeatureCollection', features: [] };
   lowRes.features.forEach((feature) => {
     if (feature.geometry.type === 'Polygon') {
       try {
@@ -287,14 +281,14 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
 };
 
 const fetchUsCovidByCountyJson = async () => {
+  const cached = myCache.get('usCasesByCounty');
+  if (cached) return cached;
+
   const cases = await fetchUsCovidByCounty();
 
-  let usCovidByCounty = myCache.get('usCasesByCounty');
-  if (usCovidByCounty === undefined) {
-    usCovidByCounty = { data: await csv().fromStream(cases) };
-    myCache.set('usCasesByCounty', usCovidByCounty);
-  }
-  return usCovidByCounty;
+  const json = { data: await csv().fromStream(cases) };
+  myCache.set('usCasesByCounty', json);
+  return json;
 };
 
 const fetchCasesByCounty = async () => {
@@ -374,9 +368,6 @@ router.get('/us-cases-by-county', async (req, res, next) => {
     startIndex = lastIndex - pageSize;
     if (startIndex < 0) startIndex = 0;
   }
-
-  console.debug({ startIndex, lastIndex });
-  console.debug(req.query);
 
   res.send(cases.slice(startIndex, lastIndex));
 });
