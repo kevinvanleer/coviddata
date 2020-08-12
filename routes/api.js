@@ -61,7 +61,7 @@ const fetchUsCovidTotalsJson = async () => {
   const json = { data: await csv().fromStream(totals) };
   myCache.set('usCovidTotalsJson', json);
 
-  return _.get(json, 'data', {});
+  return json;
 };
 
 const nycboroughs = [36005, 36047, 36061, 36081, 36085];
@@ -378,6 +378,10 @@ router.get('/us-totals', async (req, res, next) => {
 
 router.get('/us-county-centroids', async (req, res, next) => {
   res.send(await fetchUsCountyCentroids());
+});
+
+router.get('/alive', async (req, res, next) => {
+  res.send(`${moment().toISOString()}`);
 });
 
 module.exports = router;
