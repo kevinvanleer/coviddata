@@ -369,7 +369,10 @@ router.get('/us-cases-by-county', async (req, res, next) => {
     if (startIndex < 0) startIndex = 0;
   }
 
-  res.send(cases.slice(startIndex, lastIndex));
+  res.send({
+    data: cases.slice(startIndex, lastIndex),
+    meta: { startIndex, lastIndex, totalCount: cases.length },
+  });
 });
 
 router.get('/us-totals', async (req, res, next) => {
