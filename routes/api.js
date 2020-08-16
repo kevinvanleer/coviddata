@@ -163,6 +163,19 @@ const fetchUsCountyCentroids = async () => {
         console.log(err);
         console.log(feature);
       }
+    } else if (feature.geometry.type === 'MultiPolygon') {
+      try {
+        centroids.features.push({
+          ...feature,
+          geometry: turf.centerOfMass(
+            turf.multiPolygon(feature.geometry.coordinates)
+          ).geometry,
+          id: feature.properties.FEATURE_ID,
+        });
+      } catch (err) {
+        console.log(err);
+        console.log(feature);
+      }
     }
   });
   myCache.set('usCountyCentroids', centroids, 0);
