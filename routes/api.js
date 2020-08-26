@@ -95,6 +95,21 @@ const mergeNycBoroughs = (json) => {
   return nyc;
 };
 
+const getPopulationData = () => {
+  return new Promise((resolve, reject) => {
+    fs.readFile(
+      path.join(
+        __dirname,
+        '../public/resources/us-estimated-population-2019.json'
+      ),
+      (err, data) => {
+        if (err) reject(err);
+        resolve(JSON.parse(data));
+      }
+    );
+  });
+};
+
 const getMoCities = () => {
   return new Promise((resolve, reject) => {
     fs.readFile(
@@ -232,6 +247,7 @@ const applyFixes = (cases) => {
   return cases;
 };
 
+/*
 const getUsCovidAnalysis = async (cases, lowResPromise) => {
   const cached = myCache.get('usCovidAnalysis');
   if (cached) return cached;
@@ -292,16 +308,27 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
   myCache.set('usCovidAnalysis', analysis);
   return analysis;
 };
+*/
 
+let fetchCovidPromise = Promise.resolve();
 const fetchUsCovidByCountyJson = async () => {
-  const cached = myCache.get('usCasesByCounty');
-  if (cached) return cached;
+  fetchCovidPromise = fetchCovidPromise.then(async () => {
+    try {
+      const cached = myCache.get('usCasesByCounty');
+      if (cached) return cached;
 
-  const cases = await fetchUsCovidByCounty();
+      console.log('Processing CSV data');
+      const cases = await fetchUsCovidByCounty();
 
-  const json = { data: await csv().fromStream(cases) };
-  myCache.set('usCasesByCounty', json);
-  return json;
+      const json = { data: await csv().fromStream(cases) };
+      myCache.set('usCasesByCounty', json);
+      return json;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  });
+  return fetchCovidPromise;
 };
 
 const fetchCasesByCounty = async () => {
@@ -316,7 +343,7 @@ router.get('/', function (req, res, next) {
 });
 
 router.get('/us-county-stats', async (req, res, next) => {
-  const { casesByCounty } = await fetchCasesByCounty();
+  const { data: casesByCounty } = await fetchCasesByCounty();
 
   const casesArray = [];
   const deathsArray = [];
@@ -329,6 +356,7 @@ router.get('/us-county-stats', async (req, res, next) => {
     totalDeaths += _.last(deathsArray);
   });
 
+  const popData = await getPopulationData();
   const casesMax = jStat.max(casesArray);
   const casesMean = jStat.mean(casesArray);
   const casesMode = jStat.mode(casesArray);
@@ -348,6 +376,7 @@ router.get('/us-county-stats', async (req, res, next) => {
   const deathsMode = jStat.mode(deathsArray);
 
   res.send({
+    population: popData,
     cases: {
       max: casesMax,
       mean: casesMean,
