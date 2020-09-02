@@ -8,7 +8,7 @@ const turf = require('@turf/turf');
 const fs = require('fs');
 const path = require('path');
 const NodeCache = require('node-cache');
-const myCache = new NodeCache({ stdTTL: 43200, useClones: false });
+const myCache = new NodeCache({ stdTTL: 3600, useClones: false });
 
 var router = express.Router();
 
@@ -26,6 +26,9 @@ const usCountiesHighResUrl =
   'https://eric.clst.org/assets/wiki/uploads/Stuff/gz_2010_us_050_00_500k.json';
   */
 
+const whoCovidByCountryUrl =
+  'https://covid19.who.int/WHO-COVID-19-global-data.csv';
+
 const covidByCountyUrl =
   'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv';
 
@@ -39,6 +42,16 @@ const fetchUsCovidByCounty = async () => {
   const response = await fetch(covidByCountyUrl);
   const text = response.body;
   myCache.set('nyTimesCovidByCounty', text);
+  return text;
+};
+
+const fetchWhoCovidByCountryCsv = async () => {
+  const cached = myCache.get('whoCovidByCountryCsv');
+  if (cached) return cached;
+
+  const response = await fetch(whoCovidByCountryUrl);
+  const text = response.body;
+  myCache.set('whoCovidByCountryCsv', text);
   return text;
 };
 
@@ -310,6 +323,30 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
 };
 */
 
+let fetchWhoCovidPromise = Promise.resolve();
+const fetchWhoCovidByCountryJson = async () => {
+  fetchWhoCovidPromise = fetchCovidPromise.then(async () => {
+    try {
+      const cached = myCache.get('whoCovidByCountryJson');
+      if (cached) return cached;
+
+      const who = await fetchWhoCovidByCountryCsv();
+
+      const json = { data: await csv().fromStream(who) };
+      myCache.set('whoCovidByCountryJson', json);
+      return json;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  });
+  return fetchWhoCovidPromise;
+};
+
+const fetchWhoCovid = async () => {
+  return await fetchWhoCovidByCountryJson();
+};
+
 let fetchCovidPromise = Promise.resolve();
 const fetchUsCovidByCountyJson = async () => {
   fetchCovidPromise = fetchCovidPromise.then(async () => {
@@ -317,7 +354,6 @@ const fetchUsCovidByCountyJson = async () => {
       const cached = myCache.get('usCasesByCounty');
       if (cached) return cached;
 
-      console.log('Processing CSV data');
       const cases = await fetchUsCovidByCounty();
 
       const json = { data: await csv().fromStream(cases) };
@@ -400,6 +436,25 @@ router.get('/us-counties', async (req, res, next) => {
 
 router.get('/us-cases-by-county', async (req, res, next) => {
   const { data: cases } = await fetchCasesByCounty();
+
+  const pageSize = parseInt(req.query.pageSize) || cases.length;
+  let startIndex = parseInt(req.query.startIndex) || 0;
+  let lastIndex = startIndex + pageSize;
+
+  if (req.query.reverse === 'true') {
+    lastIndex = cases.length - startIndex;
+    startIndex = lastIndex - pageSize;
+    if (startIndex < 0) startIndex = 0;
+  }
+
+  res.send({
+    data: cases.slice(startIndex, lastIndex),
+    meta: { startIndex, lastIndex, totalCount: cases.length },
+  });
+});
+
+router.get('/global-covid-by-country', async (req, res, next) => {
+  const { data: cases } = await fetchWhoCovid();
 
   const pageSize = parseInt(req.query.pageSize) || cases.length;
   let startIndex = parseInt(req.query.startIndex) || 0;
