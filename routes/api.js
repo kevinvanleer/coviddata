@@ -32,6 +32,9 @@ const whoCovidByCountryUrl =
 const covidByCountyUrl =
   'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv';
 
+const covidByStateUrl =
+  'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv';
+
 const usCovidTotalsUrl =
   'https://raw.githubusercontent.com/nytimes/covid-19-data/master/us.csv';
 
@@ -42,6 +45,16 @@ const fetchUsCovidByCounty = async () => {
   const response = await fetch(covidByCountyUrl);
   const text = response.body;
   myCache.set('nyTimesCovidByCounty', text);
+  return text;
+};
+
+const fetchUsCovidByState = async () => {
+  const cached = myCache.get('nyTimesCovidByState');
+  if (cached) return cached;
+
+  const response = await fetch(covidByStateUrl);
+  const text = response.body;
+  myCache.set('nyTimesCovidByState', text);
   return text;
 };
 
@@ -325,7 +338,7 @@ const getUsCovidAnalysis = async (cases, lowResPromise) => {
 
 let fetchWhoCovidPromise = Promise.resolve();
 const fetchWhoCovidByCountryJson = async () => {
-  fetchWhoCovidPromise = fetchCovidPromise.then(async () => {
+  fetchWhoCovidPromise = fetchWhoCovidPromise.then(async () => {
     try {
       const cached = myCache.get('whoCovidByCountryJson');
       if (cached) return cached;
@@ -347,9 +360,9 @@ const fetchWhoCovid = async () => {
   return await fetchWhoCovidByCountryJson();
 };
 
-let fetchCovidPromise = Promise.resolve();
+let fetchCovidByCountyPromise = Promise.resolve();
 const fetchUsCovidByCountyJson = async () => {
-  fetchCovidPromise = fetchCovidPromise.then(async () => {
+  fetchCovidByCountyPromise = fetchCovidByCountyPromise.then(async () => {
     try {
       const cached = myCache.get('usCasesByCounty');
       if (cached) return cached;
@@ -364,7 +377,7 @@ const fetchUsCovidByCountyJson = async () => {
       return null;
     }
   });
-  return fetchCovidPromise;
+  return fetchCovidByCountyPromise;
 };
 
 const fetchCasesByCounty = async () => {
@@ -373,10 +386,60 @@ const fetchCasesByCounty = async () => {
   return applyFixes(usCovidByCounty);
 };
 
-/* GET users listing. */
+const getGlobalCovidTotals = async () => {
+  const cached = myCache.get('GlobalCovidTotals');
+  if (cached) return cached;
+
+  const { data } = await fetchWhoCovid();
+
+  const totals = {};
+
+  data.forEach((record) => {
+    if (record.Date_reported in totals) {
+      totals[record.Date_reported].cases += parseInt(record.Cumulative_cases);
+      totals[record.Date_reported].deaths += parseInt(record.Cumulative_deaths);
+    } else {
+      _.set(totals, [record.Date_reported], {
+        cases: parseInt(record.Cumulative_cases),
+        deaths: parseInt(record.Cumulative_deaths),
+        date: record.Date_reported,
+      });
+    }
+  });
+  const totalsArray = Object.values(totals).sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  myCache.set('GlobalCovidTotals', totalsArray);
+  return totalsArray;
+};
+
 router.get('/', function (req, res, next) {
   res.send('version 0.0.1');
 });
+
+let fetchCovidByStatePromise = Promise.resolve();
+const fetchUsCovidByStateJson = async () => {
+  fetchCovidByStatePromise = fetchCovidByStatePromise.then(async () => {
+    try {
+      const cached = myCache.get('usCasesByState');
+      if (cached) return cached;
+
+      const cases = await fetchUsCovidByState();
+
+      const json = { data: await csv().fromStream(cases) };
+      myCache.set('usCasesByState', json);
+      return json;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  });
+  return fetchCovidByStatePromise;
+};
+
+const fetchCasesByState = async () => {
+  return await fetchUsCovidByStateJson();
+};
 
 router.get('/us-county-stats', async (req, res, next) => {
   const { data: casesByCounty } = await fetchCasesByCounty();
@@ -434,6 +497,25 @@ router.get('/us-counties', async (req, res, next) => {
   res.send(await fetchUsCountiesCitiesHybrid(resolution));
 });
 
+router.get('/us-covid-by-state', async (req, res, next) => {
+  const { data: cases } = await fetchCasesByState();
+
+  const pageSize = parseInt(req.query.pageSize) || cases.length;
+  let startIndex = parseInt(req.query.startIndex) || 0;
+  let lastIndex = startIndex + pageSize;
+
+  if (req.query.reverse === 'true') {
+    lastIndex = cases.length - startIndex;
+    startIndex = lastIndex - pageSize;
+    if (startIndex < 0) startIndex = 0;
+  }
+
+  res.send({
+    data: cases.slice(startIndex, lastIndex),
+    meta: { startIndex, lastIndex, totalCount: cases.length },
+  });
+});
+
 router.get('/us-cases-by-county', async (req, res, next) => {
   const { data: cases } = await fetchCasesByCounty();
 
@@ -451,6 +533,10 @@ router.get('/us-cases-by-county', async (req, res, next) => {
     data: cases.slice(startIndex, lastIndex),
     meta: { startIndex, lastIndex, totalCount: cases.length },
   });
+});
+
+router.get('/global-covid-totals', async (req, res, next) => {
+  res.send(await getGlobalCovidTotals());
 });
 
 router.get('/global-covid-by-country', async (req, res, next) => {
