@@ -44,7 +44,7 @@ const fetchUsCovidByCounty = async () => {
 
   const response = await fetch(covidByCountyUrl);
   const text = response.body;
-  myCache.set('nyTimesCovidByCounty', text);
+  //myCache.set('nyTimesCovidByCounty', text);
   return text;
 };
 
@@ -119,6 +119,39 @@ const mergeNycBoroughs = (json) => {
     }
   });
   return nyc;
+};
+
+const getWorldPopulationData = () => {
+  return new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(
+      path.join(__dirname, '../public/resources/2019_WorldPopulation.csv'),
+      { encoding: 'utf8' }
+    );
+    resolve(csv().fromStream(stream));
+  });
+};
+
+const normalizeWorldPopulationData = async () => {
+  const popJson = await getWorldPopulationData();
+  const response = await fetch(
+    'https://pkgstore.datahub.io/core/country-codes/country-codes_json/data/471a2e653140ecdd7243cdcacfd66608/country-codes_json.json'
+  );
+  const countryCodes = await response.json();
+  const normalized = {};
+  popJson.forEach((item) => {
+    const record = countryCodes.find(
+      (record) => record['ISO3166-1-Alpha-3'] === item.code
+    );
+    if (record) {
+      normalized[record['ISO3166-1-Alpha-2']] = {
+        ...item,
+        population: item.POPESTIMATE2019,
+      };
+    } else {
+      console.debug({ record, item });
+    }
+  });
+  return normalized;
 };
 
 const getPopulationData = () => {
@@ -263,12 +296,17 @@ const fixRhodeIsland = (record) => {
   return record;
 };
 
+const fixCountyRecord = (record) => {
+  record = fixNewYorkCity(record);
+  record = fixRhodeIsland(record);
+  record = fixJoplinMo(record);
+  record = fixKansasCity(record);
+  return record;
+};
+
 const applyFixes = (cases) => {
   cases.data.forEach((record) => {
-    record = fixNewYorkCity(record);
-    record = fixRhodeIsland(record);
-    record = fixJoplinMo(record);
-    record = fixKansasCity(record);
+    record = fixCountyRecord(record);
   });
   return cases;
 };
@@ -517,6 +555,18 @@ router.get('/us-covid-by-state', async (req, res, next) => {
 });
 
 router.get('/us-cases-by-county', async (req, res, next) => {
+  const response = await fetch(covidByCountyUrl);
+  const csvConverter = new csv.Converter({
+    constructResult: false,
+    downstreamFormat: 'array',
+  });
+  response.body
+    .pipe(csvConverter)
+    .subscribe((json) => fixCountyRecord(json))
+    .pipe(res);
+});
+/*
+router.get('/us-cases-by-county', async (req, res, next) => {
   const { data: cases } = await fetchCasesByCounty();
 
   const pageSize = parseInt(req.query.pageSize) || cases.length;
@@ -534,6 +584,7 @@ router.get('/us-cases-by-county', async (req, res, next) => {
     meta: { startIndex, lastIndex, totalCount: cases.length },
   });
 });
+*/
 
 router.get('/global-covid-totals', async (req, res, next) => {
   res.send(await getGlobalCovidTotals());
@@ -556,6 +607,10 @@ router.get('/global-covid-by-country', async (req, res, next) => {
     data: cases.slice(startIndex, lastIndex),
     meta: { startIndex, lastIndex, totalCount: cases.length },
   });
+});
+
+router.get('/world-population', async (req, res) => {
+  res.send(await normalizeWorldPopulationData());
 });
 
 router.get('/us-totals', async (req, res, next) => {
