@@ -2725,6 +2725,11 @@ regexpp@^3.0.0, regexpp@^3.1.0:
   resolved "https://registry.yarnpkg.com/regexpp/-/regexpp-3.1.0.tgz#206d0ad0a5648cffbdb8ae46438f3dc51c9f78e2"
   integrity sha512-ZOIzd8yVsQQA7j8GCSlPGXwg5PfmA1mrq0JP4nGhh54LaKN3xdai/vHUDu74pKwV8OxseMS65u2NImosQcSD0Q==
 
+rereadable-stream@^1.4.4:
+  version "1.4.4"
+  resolved "https://registry.yarnpkg.com/rereadable-stream/-/rereadable-stream-1.4.4.tgz#438f35df475c0ddc2106ba6346b8cf1add9d9d01"
+  integrity sha512-D73OfVq0EIeCwlBQP5h8z4ngWttZRglasDIkoNeSqyKETB5pTR/hqS3PROiszi3vRCuRdcDMTjT1pgzDYMM3aA==
+
 resolve-from@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/resolve-from/-/resolve-from-4.0.0.tgz#4abcd852ad32dd7baabfe9b40e00a36db5f392e6"

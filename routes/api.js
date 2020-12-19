@@ -8,6 +8,8 @@ const turf = require('@turf/turf');
 const fs = require('fs');
 const path = require('path');
 const NodeCache = require('node-cache');
+const { ReReadable } = require('rereadable-stream');
+
 const myCache = new NodeCache({ stdTTL: 3600, useClones: false });
 
 var router = express.Router();
@@ -40,12 +42,13 @@ const usCovidTotalsUrl =
 
 const fetchUsCovidByCounty = async () => {
   const cached = myCache.get('nyTimesCovidByCounty');
-  if (cached) return cached;
+  if (cached) return cached.rewind();
 
   const response = await fetch(covidByCountyUrl);
-  const text = response.body;
-  //myCache.set('nyTimesCovidByCounty', text);
-  return text;
+  const stream = response.body;
+  const rewindable = stream.pipe(new ReReadable());
+  myCache.set('nyTimesCovidByCounty', rewindable);
+  return rewindable.rewind();
 };
 
 const fetchUsCovidByState = async () => {
@@ -555,12 +558,12 @@ router.get('/us-covid-by-state', async (req, res, next) => {
 });
 
 router.get('/us-cases-by-county', async (req, res, next) => {
-  const response = await fetch(covidByCountyUrl);
+  const stream = await fetchUsCovidByCounty();
   const csvConverter = new csv.Converter({
     constructResult: false,
     downstreamFormat: 'array',
   });
-  response.body
+  stream
     .pipe(csvConverter)
     .subscribe((json) => fixCountyRecord(json))
     .pipe(res);
