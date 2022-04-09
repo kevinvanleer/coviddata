@@ -16,7 +16,7 @@
     "jStat": "^1.8.6",
     "jstat": "^1.9.3",
     "lodash": "^4.17.21",
-    "moment": "^2.27.0",
+    "moment": "^2.29.2",
     "morgan": "~1.9.1",
     "node-cache": "^5.1.2",
     "node-fetch": "^2.6.0",
