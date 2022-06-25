@@ -19,7 +19,7 @@
     "moment": "^2.27.0",
     "morgan": "~1.9.1",
     "node-cache": "^5.1.2",
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^2.6.7",
     "rereadable-stream": "^1.4.4"
   },
   "devDependencies": {
