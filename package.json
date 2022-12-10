@@ -12,7 +12,7 @@
     "cookie-parser": "~1.4.4",
     "csvtojson": "^2.0.10",
     "debug": "~2.6.9",
-    "express": "~4.16.1",
+    "express": "~4.17.3",
     "jStat": "^1.8.6",
     "jstat": "^1.9.3",
     "lodash": "^4.17.21",
