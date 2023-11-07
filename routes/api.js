@@ -63,12 +63,12 @@ const fetchUsCovidByState = async () => {
 
 const fetchWhoCovidByCountryCsv = async () => {
   const cached = myCache.get('whoCovidByCountryCsv');
-  if (cached) return cached;
+  if (cached) return cached.rewind();
 
   const response = await fetch(whoCovidByCountryUrl);
-  const text = response.body;
-  myCache.set('whoCovidByCountryCsv', text);
-  return text;
+  const rewindable = response.body.pipe(new ReReadable());
+  myCache.set('whoCovidByCountryCsv', rewindable);
+  return rewindable.rewind();
 };
 
 const fetchUsCovidTotals = async () => {
@@ -568,48 +568,20 @@ router.get('/us-cases-by-county', async (req, res, next) => {
     .subscribe((json) => fixCountyRecord(json))
     .pipe(res);
 });
-/*
-router.get('/us-cases-by-county', async (req, res, next) => {
-  const { data: cases } = await fetchCasesByCounty();
-
-  const pageSize = parseInt(req.query.pageSize) || cases.length;
-  let startIndex = parseInt(req.query.startIndex) || 0;
-  let lastIndex = startIndex + pageSize;
-
-  if (req.query.reverse === 'true') {
-    lastIndex = cases.length - startIndex;
-    startIndex = lastIndex - pageSize;
-    if (startIndex < 0) startIndex = 0;
-  }
-
-  res.send({
-    data: cases.slice(startIndex, lastIndex),
-    meta: { startIndex, lastIndex, totalCount: cases.length },
-  });
-});
-*/
 
 router.get('/global-covid-totals', async (req, res, next) => {
   res.send(await getGlobalCovidTotals());
 });
 
 router.get('/global-covid-by-country', async (req, res, next) => {
-  const { data: cases } = await fetchWhoCovid();
-
-  const pageSize = parseInt(req.query.pageSize) || cases.length;
-  let startIndex = parseInt(req.query.startIndex) || 0;
-  let lastIndex = startIndex + pageSize;
-
-  if (req.query.reverse === 'true') {
-    lastIndex = cases.length - startIndex;
-    startIndex = lastIndex - pageSize;
-    if (startIndex < 0) startIndex = 0;
-  }
-
-  res.send({
-    data: cases.slice(startIndex, lastIndex),
-    meta: { startIndex, lastIndex, totalCount: cases.length },
+  const stream = await fetchWhoCovidByCountryCsv();
+  const csvConverter = new csv.Converter({
+    constructResult: false,
+    downstreamFormat: 'array',
   });
+  stream
+    .pipe(csvConverter)
+    .pipe(res);
 });
 
 router.get('/world-population', async (req, res) => {
