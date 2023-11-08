@@ -564,7 +564,7 @@ router.get('/us-cases-by-county', async (req, res, next) => {
     .rewind()
     .pipe(csv())
     .subscribe((json) => fixCountyRecord(json))
-    //.pipe(gzip)
+    .pipe(gzip)
     .pipe(res);
 });
 
@@ -574,9 +574,11 @@ router.get('/global-covid-totals', async (req, res, next) => {
 
 router.get('/global-covid-by-country', async (req, res, next) => {
   const stream = await fetchWhoCovidByCountryCsv();
+  const gzip = zlib.createGzip({level: zlib.constants.Z_BEST_SPEED});
   stream
     .rewind()
     .pipe(csv())
+    .pipe(gzip)
     .pipe(res);
 });
 
