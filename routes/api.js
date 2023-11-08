@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const NodeCache = require('node-cache');
 const { ReReadable } = require('rereadable-stream');
+const zlib = require('node:zlib');
 
 const myCache = new NodeCache({ stdTTL: 3600, useClones: false });
 
@@ -42,13 +43,12 @@ const usCovidTotalsUrl =
 
 const fetchUsCovidByCounty = async () => {
   const cached = myCache.get('nyTimesCovidByCounty');
-  if (cached) return cached.rewind();
+  if (cached) return cached;
 
   const response = await fetch(covidByCountyUrl);
-  const stream = response.body;
-  const rewindable = stream.pipe(new ReReadable());
+  const rewindable = response.body.pipe(new ReReadable());
   myCache.set('nyTimesCovidByCounty', rewindable);
-  return rewindable.rewind();
+  return rewindable;
 };
 
 const fetchUsCovidByState = async () => {
@@ -63,12 +63,12 @@ const fetchUsCovidByState = async () => {
 
 const fetchWhoCovidByCountryCsv = async () => {
   const cached = myCache.get('whoCovidByCountryCsv');
-  if (cached) return cached.rewind();
+  if (cached) return cached;
 
   const response = await fetch(whoCovidByCountryUrl);
   const rewindable = response.body.pipe(new ReReadable());
   myCache.set('whoCovidByCountryCsv', rewindable);
-  return rewindable.rewind();
+  return rewindable;
 };
 
 const fetchUsCovidTotals = async () => {
@@ -386,7 +386,7 @@ const fetchWhoCovidByCountryJson = async () => {
 
       const who = await fetchWhoCovidByCountryCsv();
 
-      const json = { data: await csv().fromStream(who) };
+      const json = { data: await csv().fromStream(who.rewind()) };
       myCache.set('whoCovidByCountryJson', json);
       return json;
     } catch (err) {
@@ -559,13 +559,12 @@ router.get('/us-covid-by-state', async (req, res, next) => {
 
 router.get('/us-cases-by-county', async (req, res, next) => {
   const stream = await fetchUsCovidByCounty();
-  const csvConverter = new csv.Converter({
-    constructResult: false,
-    downstreamFormat: 'array',
-  });
+  const gzip = zlib.createGzip({level: zlib.constants.Z_BEST_SPEED});
   stream
-    .pipe(csvConverter)
+    .rewind()
+    .pipe(csv())
     .subscribe((json) => fixCountyRecord(json))
+    //.pipe(gzip)
     .pipe(res);
 });
 
@@ -575,12 +574,9 @@ router.get('/global-covid-totals', async (req, res, next) => {
 
 router.get('/global-covid-by-country', async (req, res, next) => {
   const stream = await fetchWhoCovidByCountryCsv();
-  const csvConverter = new csv.Converter({
-    constructResult: false,
-    downstreamFormat: 'array',
-  });
   stream
-    .pipe(csvConverter)
+    .rewind()
+    .pipe(csv())
     .pipe(res);
 });
 
